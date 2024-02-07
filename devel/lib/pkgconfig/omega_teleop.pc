@@ -1,0 +1,8 @@
+prefix=/home/irsl/ysm_ws/teleop_ws/devel
+
+Name: omega_teleop
+Description: Description of omega_teleop
+Version: 0.0.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 

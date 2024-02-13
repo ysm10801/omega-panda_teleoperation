@@ -60,11 +60,7 @@
 #include "ros/ros.h"
 #include "std_msgs/Float64MultiArray.h"
 #include "geometry_msgs/PoseStamped.h"
-
-#include <franka/duration.h>
-#include <franka/exception.h>
-#include <franka/model.h>
-#include <franka/robot.h>
+#include "control_msgs/GripperCommandActionGoal.h"
 
 /// Global simulation running flag
 std::atomic<bool> simulationRunning = {true};
@@ -166,8 +162,8 @@ void teleoperationControlLoop(int a_deviceId)
     /* ********************** ROS Node and Publisher Start ********************** */
 
     ros::NodeHandle nh;
-    ros::Publisher omega_EEpose_pub = nh.advertise<std_msgs::Float64MultiArray>("/omega_target_EEpose", 7);
-    std_msgs::Float64MultiArray omega_EEpose_msg;
+    ros::Publisher omega_EEpose_pub = nh.advertise<geometry_msgs::PoseStamped>("/omega_target_EEpose", 7);
+    geometry_msgs::PoseStamped omega_EEpose_msg;
 
     /* *********************** ROS Node and Publisher End *********************** */
 
@@ -344,15 +340,15 @@ void teleoperationControlLoop(int a_deviceId)
         }
 
         // ROS publish of slave target
-        Eigen::Vector3d target_pos = slaveTarget.position();
-        Eigen::Vector3d target_ori = slaveTarget.angles();
+        Eigen::Vector3d target_pos = slaveCurrent.position();
+        Eigen::Quaterniond target_ori = slaveCurrent.quaternion();
 
         omega_EEpose_msg.data.clear();
         for(size_t i = 0; i < 3; i++)
         {
             omega_EEpose_msg.data.push_back(target_pos(i));
         }
-        for(size_t i = 0; i < 3; i++)
+        for(size_t i = 3; i < 6; i++)
         {
             omega_EEpose_msg.data.push_back(target_ori(i));
         }

@@ -80,13 +80,46 @@ Transform slaveCurrent;
 /// Global dummy robot object
 Robot slaveRobot;
 
+Transform pandaCurrent;
+
+int panda_pose_initializer = 0;
+
+
+class PandaPoseSubscriber {
+public:
+    PandaPoseSubscriber(const std::string& topic_name) : topic_name_(topic_name) {}
+
+    geometry_msgs::PoseStamped::ConstPtr pose_subscribe() {
+        ros::NodeHandle n_tmp;
+        subscriber_ = n_tmp.subscribe(topic_name_, 1, &PandaPoseSubscriber::panda_pose_callback, this);
+        
+        while (!msg_received)
+        ros::spinOnce();
+        ros::Duration(0.001).sleep();
+
+        return panda_pose_data_;
+    }
+
+private:
+    std::string topic_name_;
+    ros::Subscriber subscriber_;
+    bool msg_received = false;
+    geometry_msgs::PoseStamped::ConstPtr panda_pose_data_;
+
+    void panda_pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
+    {
+        std::cout << "Panda pose is subscribed" << std::endl;
+        panda_pose_data_ = msg;
+        msg_received = true;
+        subscriber_.shutdown();
+    }
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 ///
 /// This function renders the scene using OpenGL.
 ///
 ////////////////////////////////////////////////////////////////////////////////
-
-Eigen::VectorXd 
 
 int updateGraphics()
 {
@@ -155,6 +188,22 @@ int updateGraphics()
     return 0;
 }
 
+double Gripper_Width_Transform(double width)
+{
+    double width_tf = 0.0;
+    
+    if (width > 27.5){
+        return 0.08;
+    }
+    else if (width < 3.5){
+        return 0.0;
+    }
+    else {
+        width_tf = width * 0.08 / 24. - 0.011;
+        return width_tf;
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void teleoperationControlLoop(int a_deviceId)
@@ -162,20 +211,24 @@ void teleoperationControlLoop(int a_deviceId)
     /* ********************** ROS Node and Publisher Start ********************** */
 
     ros::NodeHandle nh;
-    ros::Publisher omega_EEpose_pub = nh.advertise<geometry_msgs::PoseStamped>("/omega_target_EEpose", 7);
+    // ros::Publisher omega_EEpose_pub = nh.advertise<geometry_msgs::PoseStamped>("/omega_target_EEpose", 4);
+    // ros::Publisher omega_gripper_pub = nh.advertise<control_msgs::GripperCommandActionGoal>("/omega_target_gripper_width", 4);
+    ros::Publisher omega_EEpose_pub = nh.advertise<geometry_msgs::PoseStamped>("/ee_pose_d", 4);
+    ros::Publisher omega_gripper_pub = nh.advertise<control_msgs::GripperCommandActionGoal>("/move_as/goal", 4); //Real robot Gripper
     geometry_msgs::PoseStamped omega_EEpose_msg;
+    control_msgs::GripperCommandActionGoal omega_gripper_msg;
 
     /* *********************** ROS Node and Publisher End *********************** */
 
     /// Scaling factor between master translation and slave translation.
     /// A value greater than 1.0 means that the slave's movement will be
     /// larger than the master's.
-    constexpr double LinearScaling = 0.5;
+    constexpr double LinearScaling = 1.3;
 
     /// Scaling factor between master rotation and slave rotation.
     /// A value greater than 1.0 means that the slave's movement will be
     /// larger than the master's.
-    constexpr double AngularScaling = 0.5;
+    constexpr double AngularScaling = 0.8;
 
     /// Master linear damping when teleoperation is engaged in [N/(m/s)]
     constexpr double LinearDamping = 10.0;
@@ -207,6 +260,15 @@ void teleoperationControlLoop(int a_deviceId)
     double masterAngularVelocityY = 0.0;
     double masterAngularVelocityZ = 0.0;
 
+    double masterGripperWidth = 0.0;
+    double slaveGripperWidth = 0.0;
+    double gripper_encoder = 0.0;
+    
+    double pandaX = 0.0;
+    double pandaY = 0.0;
+    double pandaZ = 0.0;
+    double pandaRotation[3][3] = {};
+
     // Declare all teleoperation control variables.
     bool teleoperationEngaged = false;
     Eigen::Vector3d masterStartPosition;
@@ -216,6 +278,9 @@ void teleoperationControlLoop(int a_deviceId)
     Eigen::Vector3d force;
     Eigen::Vector3d torque;
     Eigen::AngleAxisd previousMasterAngularMove;
+
+    Eigen::Vector3d pandaStartPosition;
+    Eigen::Matrix3d pandaStartRotation;
 
     // Stop robotic regulation of the master haptic device, but leave it with forces enabled.
     if (drdStop(true, a_deviceId) < 0)
@@ -236,6 +301,12 @@ void teleoperationControlLoop(int a_deviceId)
     // Teleoperation control loop
     while (simulationRunning)
     {
+        if (dhdGetGripperAngleDeg(&gripper_encoder) < 0)
+        {
+            std::cout << "error: failed to get gripper position (" << dhdErrorGetLastStr() << ")" << std::endl;
+            simulationRunning = false;
+            break;
+        }
         // Retrieve the haptic device position and velocity.
         if (dhdGetPositionAndOrientationFrame(&masterX, &masterY, &masterZ, masterRotation, a_deviceId) < 0)
         {
@@ -265,7 +336,10 @@ void teleoperationControlLoop(int a_deviceId)
         slaveCurrent = slaveRobot.current();
 
         // Read the status of the user button.
-        bool buttonEngaged = (dhdGetButton(0) != DHD_OFF) || engageOverride;
+        // bool buttonEngaged = (dhdGetButton(0) != DHD_OFF) || engageOverride;
+        bool buttonEngaged = engageOverride; // only use space-bar for engage
+
+        masterGripperWidth = Gripper_Width_Transform(gripper_encoder);
 
         // Handle teloperation engage/disengage events.
         if (buttonEngaged && !teleoperationEngaged)
@@ -277,6 +351,9 @@ void teleoperationControlLoop(int a_deviceId)
             // Store the current robot position as a reference starting point for teleoperation.
             slaveStartPosition = slaveCurrent.position();
             slaveStartRotation = slaveCurrent.rotation();
+
+            masterGripperWidth = Gripper_Width_Transform(gripper_encoder);
+            slaveGripperWidth = 0.0;
 
             // Engage teloperation.
             teleoperationEngaged = true;
@@ -337,23 +414,39 @@ void teleoperationControlLoop(int a_deviceId)
             // Combine all force and torque contributions.
             force = linearSpringForce + dampingForce;
             torque = angularSpringTorque + masterSpringTorque + dampingTorque;
+
+            slaveGripperWidth = masterGripperWidth;
         }
 
-        // ROS publish of slave target
-        Eigen::Vector3d target_pos = slaveCurrent.position();
-        Eigen::Quaterniond target_ori = slaveCurrent.quaternion();
+        // std::cout << "pose" << pandaCurrent.position() << std::endl;
 
-        omega_EEpose_msg.data.clear();
-        for(size_t i = 0; i < 3; i++)
-        {
-            omega_EEpose_msg.data.push_back(target_pos(i));
-        }
-        for(size_t i = 3; i < 6; i++)
-        {
-            omega_EEpose_msg.data.push_back(target_ori(i));
-        }
+        Transform DesiredPose;
+
+        DesiredPose.setPosition(pandaCurrent.position() + slaveCurrent.position());
+        DesiredPose.setRotation(slaveCurrent.rotation() * pandaCurrent.rotation());
+        
+        // ROS publish of slave target, for simulation
+        // omega_EEpose_msg.pose.position.x = slaveCurrent.position().x();
+        // omega_EEpose_msg.pose.position.y = slaveCurrent.position().y();
+        // omega_EEpose_msg.pose.position.z = slaveCurrent.position().z();
+        // omega_EEpose_msg.pose.orientation.w = slaveCurrent.quaternion().w();
+        // omega_EEpose_msg.pose.orientation.x = slaveCurrent.quaternion().x();
+        // omega_EEpose_msg.pose.orientation.y = slaveCurrent.quaternion().y();
+        // omega_EEpose_msg.pose.orientation.z = slaveCurrent.quaternion().z();
+
+        // ROS publish of relative pose, for real panda robot
+        omega_EEpose_msg.pose.position.x = DesiredPose.position().x();
+        omega_EEpose_msg.pose.position.y = DesiredPose.position().y();
+        omega_EEpose_msg.pose.position.z = DesiredPose.position().z();
+        omega_EEpose_msg.pose.orientation.w = DesiredPose.quaternion().w();
+        omega_EEpose_msg.pose.orientation.x = DesiredPose.quaternion().x();
+        omega_EEpose_msg.pose.orientation.y = DesiredPose.quaternion().y();
+        omega_EEpose_msg.pose.orientation.z = DesiredPose.quaternion().z();
+        // printf("%.4f \n", gripper_encoder);
+        omega_gripper_msg.goal.command.position = slaveGripperWidth;
 
         omega_EEpose_pub.publish(omega_EEpose_msg);
+        omega_gripper_pub.publish(omega_gripper_msg);
 
         // Send force to the haptic device.
         if (dhdSetForceAndTorqueAndGripperForce(force(0), force(1), force(2), torque(0), torque(1), torque(2), 0.0, a_deviceId) < 0)
@@ -453,9 +546,6 @@ void onError(int a_error,
 
 void userInterfaceLoop()
 {
-    
-
-
     // Initialize GLFW library.
     if (!glfwInit())
     {
@@ -573,6 +663,23 @@ int main(int argc, char **argv)
     std::cout << "All Rights Reserved." << std::endl << std::endl;
 
     ros::init(argc, argv, "omega_node");
+
+    if (panda_pose_initializer == 0){
+        PandaPoseSubscriber one_time_subscriber("/ee_pose");
+        auto pose_msg = one_time_subscriber.pose_subscribe();
+
+        Eigen::Vector3d panda_position {pose_msg->pose.position.x,
+                                        pose_msg->pose.position.y,
+                                        pose_msg->pose.position.z};
+        Eigen::Quaterniond panda_orientation {pose_msg->pose.orientation.w,
+                                              pose_msg->pose.orientation.x,
+                                              pose_msg->pose.orientation.y,
+                                              pose_msg->pose.orientation.z};
+        pandaCurrent.setPosition(panda_position);
+        pandaCurrent.setQuaternion(panda_orientation);
+
+        panda_pose_initializer++;
+    }
 
     // Open haptic device.
     int deviceId = drdOpen();

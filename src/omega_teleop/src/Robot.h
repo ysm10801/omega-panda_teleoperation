@@ -39,7 +39,7 @@ class Robot
     static constexpr bool EnforceWorkspaceLimits = true;
 
     /// Linear workspace radius in [m]
-    static constexpr double LinearWorkspaceLimit = 0.5;
+    static constexpr double LinearWorkspaceLimit = 2.0;
 
     /// Angular workspace angle in [rad]
     static constexpr double AngularWorkspaceLimit = M_PI * 90.0 / 180.0;

@@ -12,6 +12,8 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
   std_msgs
+  sensor_msgs
+  control_msgs
 )
 
 find_package(OpenGL REQUIRED)
@@ -163,6 +165,8 @@ add_executable(autoinit src/autoinit.cpp)
 add_executable(gravity src/gravity.cpp)
 add_executable(autocenter src/autocenter.cpp)
 add_executable(teleoperation src/teleoperation.cpp)
+add_executable(msg_sync src/msg_sync.cpp)
+add_executable(msg_sync_sub src/msg_sync_sub.cpp)
 
 
 target_link_libraries(segment dhd drd ${catkin_LIBRARIES})
@@ -174,6 +178,8 @@ target_link_libraries(autoinit dhd drd ${catkin_LIBRARIES})
 target_link_libraries(gravity dhd drd ${catkin_LIBRARIES})
 target_link_libraries(autocenter dhd drd ${catkin_LIBRARIES})
 target_link_libraries(teleoperation dhd drd ${catkin_LIBRARIES} Eigen3::Eigen ${OPENGL_LIBRARY} glfw)
+target_link_libraries(msg_sync ${catkin_LIBRARIES})
+target_link_libraries(msg_sync_sub ${catkin_LIBRARIES})
 
 
 #############

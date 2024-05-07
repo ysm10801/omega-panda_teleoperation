@@ -1,0 +1,12 @@
+{
+    "python.autoComplete.extraPaths": [
+        "/home/irsl/ysm_ws/teleop_ws/devel/lib/python3/dist-packages",
+        "/opt/ros/noetic/lib/python3/dist-packages",
+        "/opt/openrobots/lib/python3.11/site-packages"
+    ],
+    "python.analysis.extraPaths": [
+        "/home/irsl/ysm_ws/teleop_ws/devel/lib/python3/dist-packages",
+        "/opt/ros/noetic/lib/python3/dist-packages",
+        "/opt/openrobots/lib/python3.11/site-packages"
+    ]
+}

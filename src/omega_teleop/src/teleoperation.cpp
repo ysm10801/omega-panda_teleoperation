@@ -60,7 +60,8 @@
 #include "ros/ros.h"
 #include "std_msgs/Float64MultiArray.h"
 #include "geometry_msgs/PoseStamped.h"
-#include "control_msgs/GripperCommandActionGoal.h"
+#include "control_msgs/GripperCommand.h"
+// #include "control_msgs/GripperCommandActionGoal.h"
 
 /// Global simulation running flag
 std::atomic<bool> simulationRunning = {true};
@@ -214,9 +215,9 @@ void teleoperationControlLoop(int a_deviceId)
     // ros::Publisher omega_EEpose_pub = nh.advertise<geometry_msgs::PoseStamped>("/omega_target_EEpose", 4);
     // ros::Publisher omega_gripper_pub = nh.advertise<control_msgs::GripperCommandActionGoal>("/omega_target_gripper_width", 4);
     ros::Publisher omega_EEpose_pub = nh.advertise<geometry_msgs::PoseStamped>("/ee_pose_d", 4);
-    ros::Publisher omega_gripper_pub = nh.advertise<control_msgs::GripperCommandActionGoal>("/move_as/goal", 4); //Real robot Gripper
+    ros::Publisher omega_gripper_pub = nh.advertise<control_msgs::GripperCommand>("/topic_gripper_width", 4); //Real robot Gripper
     geometry_msgs::PoseStamped omega_EEpose_msg;
-    control_msgs::GripperCommandActionGoal omega_gripper_msg;
+    control_msgs::GripperCommand omega_gripper_msg;
 
     /* *********************** ROS Node and Publisher End *********************** */
 
@@ -361,7 +362,7 @@ void teleoperationControlLoop(int a_deviceId)
         else if (!buttonEngaged && teleoperationEngaged)
         {
             // Disengage teleoperation.
-            teleoperationEngaged = false;
+            teleoperationEngaged = false;4
         }
 
         // If teleoperation is not engaged, we set no force and no torque on the device.
@@ -443,7 +444,8 @@ void teleoperationControlLoop(int a_deviceId)
         omega_EEpose_msg.pose.orientation.y = DesiredPose.quaternion().y();
         omega_EEpose_msg.pose.orientation.z = DesiredPose.quaternion().z();
         // printf("%.4f \n", gripper_encoder);
-        omega_gripper_msg.goal.command.position = slaveGripperWidth;
+        omega_gripper_msg.position = slaveGripperWidth;
+        // omega_gripper_msg.goal.command.position = slaveGripperWidth;
 
         omega_EEpose_pub.publish(omega_EEpose_msg);
         omega_gripper_pub.publish(omega_gripper_msg);

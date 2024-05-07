@@ -1,0 +1,7 @@
+<launch>
+  <group ns="teleoperation">
+    <node pkg="omega_teleop" type="teleoperation.cpp" name="teleoperation"/>
+    <node pkg="omega_teleop" type="msg_sync.cpp" name="msg_sync"/>
+    <node pkg="omega_teleop" type="msg_sync_sub.cpp" name="msg_sync_sub"/>
+  </group>
+</launch>

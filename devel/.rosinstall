@@ -1,2 +1,2 @@
 - setup-file:
-    local-name: /home/irsl/ysm_ws/teleop_ws/devel/setup.sh
+    local-name: /home/yang/ws/omega-panda_teleoperation/devel/setup.sh

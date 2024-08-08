@@ -20,7 +20,7 @@ find_package(OpenGL REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(glfw3 REQUIRED)
 
-set(FORCE_DIMENSION_SDK_DIR /home/irsl/ysm_ws/sdk-3.17.0)
+set(FORCE_DIMENSION_SDK_DIR /home/yang/ws/sdk-3.17.0)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -165,6 +165,7 @@ add_executable(autoinit src/autoinit.cpp)
 add_executable(gravity src/gravity.cpp)
 add_executable(autocenter src/autocenter.cpp)
 add_executable(teleoperation src/teleoperation.cpp)
+add_executable(teleoperation_feedback src/teleoperation_feedback.cpp)
 add_executable(msg_sync src/msg_sync.cpp)
 add_executable(msg_sync_sub src/msg_sync_sub.cpp)
 
@@ -178,6 +179,7 @@ target_link_libraries(autoinit dhd drd ${catkin_LIBRARIES})
 target_link_libraries(gravity dhd drd ${catkin_LIBRARIES})
 target_link_libraries(autocenter dhd drd ${catkin_LIBRARIES})
 target_link_libraries(teleoperation dhd drd ${catkin_LIBRARIES} Eigen3::Eigen ${OPENGL_LIBRARY} glfw)
+target_link_libraries(teleoperation_feedback dhd drd ${catkin_LIBRARIES} Eigen3::Eigen ${OPENGL_LIBRARY} glfw)
 target_link_libraries(msg_sync ${catkin_LIBRARIES})
 target_link_libraries(msg_sync_sub ${catkin_LIBRARIES})
 

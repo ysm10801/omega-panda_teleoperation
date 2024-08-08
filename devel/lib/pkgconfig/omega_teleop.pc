@@ -1,4 +1,4 @@
-prefix=/home/irsl/ysm_ws/teleop_ws/devel
+prefix=/home/yang/ws/omega-panda_teleoperation/devel
 
 Name: omega_teleop
 Description: Description of omega_teleop

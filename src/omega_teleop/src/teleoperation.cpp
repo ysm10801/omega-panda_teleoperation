@@ -112,7 +112,6 @@ private:
         std::cout << "Panda pose is subscribed" << std::endl;
         panda_pose_data_ = msg;
         msg_received = true;
-        subscriber_.shutdown();
     }
 };
 
@@ -194,13 +193,13 @@ double Gripper_Width_Transform(double width)
     double width_tf = 0.0;
     
     if (width > 27.5){
-        return 0.08;
+        return 0.04;
     }
     else if (width < 3.5){
         return 0.0;
     }
     else {
-        width_tf = width * 0.08 / 24. - 0.011;
+        width_tf = width * 0.04 / 24. - 0.00583;
         return width_tf;
     }
 }
@@ -224,7 +223,7 @@ void teleoperationControlLoop(int a_deviceId)
     /// Scaling factor between master translation and slave translation.
     /// A value greater than 1.0 means that the slave's movement will be
     /// larger than the master's.
-    constexpr double LinearScaling = 1.3;
+    constexpr double LinearScaling = 7.0; // 3.0 for simulation, 1.3 for real robot
 
     /// Scaling factor between master rotation and slave rotation.
     /// A value greater than 1.0 means that the slave's movement will be
@@ -362,7 +361,7 @@ void teleoperationControlLoop(int a_deviceId)
         else if (!buttonEngaged && teleoperationEngaged)
         {
             // Disengage teleoperation.
-            teleoperationEngaged = false;4
+            teleoperationEngaged = false;
         }
 
         // If teleoperation is not engaged, we set no force and no torque on the device.
@@ -723,6 +722,9 @@ int main(int argc, char **argv)
     std::cout << "press ' ' in the UI window to engage/disengage teleoperation, or" << std::endl;
     std::cout << "press 'q' in the UI window to quit." << std::endl;
     std::cout << std::endl;
+
+    double omega_freq = dhdGetComFreq();
+    printf("Omega 7 Communication Frequency: %.4f", omega_freq);
 
     // Align the master haptic device with the slave robot initial position.
     // In this example, the slave robot initial position is located at the center of the workspace.

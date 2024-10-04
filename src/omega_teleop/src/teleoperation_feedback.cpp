@@ -87,8 +87,18 @@ Transform DesiredPose;
 Transform pandaUpdate;
 
 Eigen::Vector3d pose_diff;
+double gripper_diff;
+
+double grasp_force = 0.0;
 
 int panda_pose_initializer = 0;
+double gripperCurrent = 0.0;
+
+double gripperForceTorque[12] = {0};
+
+double panda_feedback_gain = 70.0;
+double gripper_feedback_gain = 200.0;
+double FT_feedback_gain = 0.05;
 
 
 class PandaPoseSubscriber {
@@ -109,6 +119,9 @@ public:
 private:
     std::string topic_name_;
     ros::Subscriber subscriber_;
+    bool msg_received = false;
+    geometry_msgs::PoseStamped::ConstPtr panda_pose_data_;
+    
     void panda_pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
     {
         std::cout << "Panda pose is subscribed" << std::endl;
@@ -119,7 +132,7 @@ private:
 
 
 void pose_update_callback(const geometry_msgs::PoseStamped::ConstPtr& msg){
-    std::cout << "Panda pose is Updated" << std::endl;
+    // std::cout << "Panda pose is Updated" << std::endl;
 
     Eigen::Vector3d panda_position_upd {msg->pose.position.x,
                                     msg->pose.position.y,
@@ -132,6 +145,22 @@ void pose_update_callback(const geometry_msgs::PoseStamped::ConstPtr& msg){
     pandaUpdate.setQuaternion(panda_orientation_upd);
 }
 
+void gripper_update_callback(const control_msgs::GripperCommand::ConstPtr& msg){
+    // std::cout << "Gripper width is updated" << std::endl;
+    double gripper_tf = (msg->position - 3) * (-0.00015873) + 0.04; // Convert from 200-3 to 0.0-0.04
+    if (gripper_tf < 1e-5){
+        gripperCurrent = 0.0;
+    }
+    else{
+        gripperCurrent = gripper_tf;
+    }
+}
+
+void FT_sensor_callback(const std_msgs::Float64MultiArray::ConstPtr& msg){
+    for (int i = 0; i < 12; i++){
+        gripperForceTorque[i] = msg->data[i];
+    }
+}
 ////////////////////////////////////////////////////////////////////////////////
 ///
 /// This function renders the scene using OpenGL.
@@ -205,18 +234,18 @@ int updateGraphics()
     return 0;
 }
 
-double Gripper_Width_Transform(double width)
+double Gripper_Width_Transform(double width) // Omega 7 gripper width to Panda gripper width
 {
     double width_tf = 0.0;
     
-    if (width > 27.5){
-        return 0.08;
+    if (width > 28.2){
+        return 0.04;
     }
-    else if (width < 3.5){
+    else if (width < 0.2){
         return 0.0;
     }
     else {
-        width_tf = width * 0.08 / 24. - 0.011;
+        width_tf = width * 0.04 / 28. - 0.00028;
         return width_tf;
     }
 }
@@ -231,7 +260,7 @@ void teleoperationControlLoop(int a_deviceId)
     // ros::Publisher omega_EEpose_pub = nh.advertise<geometry_msgs::PoseStamped>("/omega_target_EEpose", 4);
     // ros::Publisher omega_gripper_pub = nh.advertise<control_msgs::GripperCommandActionGoal>("/omega_target_gripper_width", 4);
     ros::Publisher omega_EEpose_pub = nh.advertise<geometry_msgs::PoseStamped>("/ee_pose_d", 4);
-    ros::Publisher omega_gripper_pub = nh.advertise<control_msgs::GripperCommand>("/topic_gripper_width", 4); //Real robot Gripper
+    ros::Publisher omega_gripper_pub = nh.advertise<control_msgs::GripperCommand>("/gripper_width_desired", 4); //Real robot Gripper
     geometry_msgs::PoseStamped omega_EEpose_msg;
     control_msgs::GripperCommand omega_gripper_msg;
 
@@ -239,6 +268,9 @@ void teleoperationControlLoop(int a_deviceId)
     geometry_msgs::PoseStamped EE_force_msg;
 
     ros::Subscriber pose_updater = nh.subscribe("/ee_pose", 1000, pose_update_callback);
+    ros::Subscriber gripper_updater = nh.subscribe("/gripper_width_current", 1000, gripper_update_callback);
+    // ros::Subscriber FT_sensor = nh.subscribe("/ft_sensor_value", 1000, FT_sensor_callback);
+    // ros::Subscriber FT_updater = nh.subscribe("/ft_sensor_filtered_value", 1000, FT_sensor_callback);
 
     /* *********************** ROS Node and Publisher End *********************** */
 
@@ -283,14 +315,10 @@ void teleoperationControlLoop(int a_deviceId)
     double masterAngularVelocityZ = 0.0;
 
     double masterGripperWidth = 0.0;
-    double slaveGripperWidth = 0.0;
+    double slaveGripperWidth = 0.04;
     double gripper_encoder = 0.0;
     
-    double pandaX = 0.0;
-    double pandaY = 0.0;
-    double pandaZ = 0.0;
-    double pandaRotation[3][3] = {};
-
+    
     // Declare all teleoperation control variables.
     bool teleoperationEngaged = false;
     Eigen::Vector3d masterStartPosition;
@@ -301,9 +329,6 @@ void teleoperationControlLoop(int a_deviceId)
     Eigen::Vector3d torque;
     Eigen::AngleAxisd previousMasterAngularMove;
 
-    Eigen::Vector3d pandaStartPosition;
-    Eigen::Matrix3d pandaStartRotation;
-
     // Stop robotic regulation of the master haptic device, but leave it with forces enabled.
     if (drdStop(true, a_deviceId) < 0)
     {
@@ -313,7 +338,8 @@ void teleoperationControlLoop(int a_deviceId)
     }
 
     // Enable button emulation on devices featuring a gripper.
-    if (dhdHasActiveGripper(a_deviceId) && dhdEmulateButton(DHD_ON, a_deviceId) < 0)
+    // if (dhdHasActiveGripper(a_deviceId) && dhdEmulateButton(DHD_ON, a_deviceId) < 0)
+    if (dhdHasActiveGripper(a_deviceId) < 0)
     {
         std::cout << "error: failed to enable button emulation (" << dhdErrorGetLastStr() << ")" << std::endl;
         simulationRunning = false;
@@ -323,6 +349,7 @@ void teleoperationControlLoop(int a_deviceId)
     // Teleoperation control loop
     while (simulationRunning)
     {
+        // printf("%f \n", gripper_encoder);
         // pose_updater.pose_subscribe();
         if (dhdGetGripperAngleDeg(&gripper_encoder) < 0)
         {
@@ -376,7 +403,7 @@ void teleoperationControlLoop(int a_deviceId)
             slaveStartRotation = slaveCurrent.rotation();
 
             masterGripperWidth = Gripper_Width_Transform(gripper_encoder);
-            slaveGripperWidth = 0.0;
+            slaveGripperWidth = 0.04;
 
             // Engage teloperation.
             teleoperationEngaged = true;
@@ -435,14 +462,20 @@ void teleoperationControlLoop(int a_deviceId)
             Eigen::Vector3d dampingTorque = -1.0 * AngularDamping * masterAngularVelocity;
 
             pose_diff = DesiredPose.position() - pandaUpdate.position();
+            gripper_diff = gripperCurrent - slaveGripperWidth;
 
             // Combine all force and torque contributions.
-            force = linearSpringForce + dampingForce - 70.0 * pose_diff;
+            force = linearSpringForce + dampingForce - panda_feedback_gain * pose_diff;
             // force = linearSpringForce + dampingForce; // sim
             torque = angularSpringTorque + masterSpringTorque + dampingTorque;
+
+            grasp_force = gripper_diff * gripper_feedback_gain;
+            // grasp_force = gripper_diff * gripper_feedback_gain -(gripperForceTorque[2] + gripperForceTorque[8])*FT_feedback_gain;
+            // printf("Feedback from position %.4f\n", gripper_diff * gripper_feedback_gain);
+            // printf("Feedback from sensor %.4f\n", -(gripperForceTorque[2] + gripperForceTorque[8])*FT_feedback_gain);
             
-            printf("Computed force:  %.4f, %.4f, %.4f \n", force(0), force(1), force(2));
-            printf("Pose difference: %.4f, %.4f, %.4f \n", pose_diff(0), pose_diff(1), pose_diff(2));
+            // printf("Computed force:  %.4f, %.4f, %.4f \n", force(0), force(1), force(2));
+            // printf("Pose difference: %.4f, %.4f, %.4f \n", pose_diff(0), pose_diff(1), pose_diff(2));
             slaveGripperWidth = masterGripperWidth;
         }
 
@@ -482,7 +515,7 @@ void teleoperationControlLoop(int a_deviceId)
         omega_gripper_pub.publish(omega_gripper_msg);
 
         // Send force to the haptic device.
-        if (dhdSetForceAndTorqueAndGripperForce(force(0), force(1), force(2), torque(0), torque(1), torque(2), 0.0, a_deviceId) < 0)
+        if (dhdSetForceAndTorqueAndGripperForce(force(0), force(1), force(2), torque(0), torque(1), torque(2), grasp_force, a_deviceId) < 0)
         {
             std::cout << "error: failed to set haptic force (" << dhdErrorGetLastStr() << ")" << std::endl;
             simulationRunning = false;

@@ -214,7 +214,7 @@ void teleoperationControlLoop(int a_deviceId)
     // ros::Publisher omega_EEpose_pub = nh.advertise<geometry_msgs::PoseStamped>("/omega_target_EEpose", 4);
     // ros::Publisher omega_gripper_pub = nh.advertise<control_msgs::GripperCommandActionGoal>("/omega_target_gripper_width", 4);
     ros::Publisher omega_EEpose_pub = nh.advertise<geometry_msgs::PoseStamped>("/ee_pose_d", 4);
-    ros::Publisher omega_gripper_pub = nh.advertise<control_msgs::GripperCommand>("/topic_gripper_width", 4); //Real robot Gripper
+    ros::Publisher omega_gripper_pub = nh.advertise<control_msgs::GripperCommand>("/gripper_width_desired", 4); //Real robot Gripper
     geometry_msgs::PoseStamped omega_EEpose_msg;
     control_msgs::GripperCommand omega_gripper_msg;
 
@@ -223,7 +223,7 @@ void teleoperationControlLoop(int a_deviceId)
     /// Scaling factor between master translation and slave translation.
     /// A value greater than 1.0 means that the slave's movement will be
     /// larger than the master's.
-    constexpr double LinearScaling = 7.0; // 3.0 for simulation, 1.3 for real robot
+    constexpr double LinearScaling = 3.1; // 3.0 for simulation, 1.3 for real robot
 
     /// Scaling factor between master rotation and slave rotation.
     /// A value greater than 1.0 means that the slave's movement will be
@@ -665,6 +665,7 @@ int main(int argc, char **argv)
 
     ros::init(argc, argv, "omega_node");
 
+    // Get the initial panda pose to initialize the slave robot
     if (panda_pose_initializer == 0){
         PandaPoseSubscriber one_time_subscriber("/ee_pose");
         auto pose_msg = one_time_subscriber.pose_subscribe();
@@ -724,7 +725,7 @@ int main(int argc, char **argv)
     std::cout << std::endl;
 
     double omega_freq = dhdGetComFreq();
-    printf("Omega 7 Communication Frequency: %.4f", omega_freq);
+    printf("Omega 7 Communication Frequency: %.4f\n", omega_freq);
 
     // Align the master haptic device with the slave robot initial position.
     // In this example, the slave robot initial position is located at the center of the workspace.

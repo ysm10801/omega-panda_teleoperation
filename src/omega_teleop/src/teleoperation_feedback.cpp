@@ -109,9 +109,6 @@ public:
 private:
     std::string topic_name_;
     ros::Subscriber subscriber_;
-    bool msg_received = false;
-    geometry_msgs::PoseStamped::ConstPtr panda_pose_data_;
-
     void panda_pose_callback(const geometry_msgs::PoseStamped::ConstPtr& msg)
     {
         std::cout << "Panda pose is subscribed" << std::endl;

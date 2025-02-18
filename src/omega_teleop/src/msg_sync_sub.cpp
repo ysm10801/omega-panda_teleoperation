@@ -7,19 +7,21 @@
 class RecorderSubNode{
 public:
     RecorderSubNode();
-    void EEposeCallback(const geometry_msgs::PoseStampedConstPtr &msg);
-    void GripperCallback(const control_msgs::GripperCommandConstPtr &msg);
+    void EEposeCurrentCallback(const geometry_msgs::PoseStampedConstPtr &msg);
+    void EEposeDesiredCallback(const geometry_msgs::PoseStampedConstPtr &msg);
+    void GripperCurrentCallback(const control_msgs::GripperCommandConstPtr &msg);
+    void GripperDesiredCallback(const control_msgs::GripperCommandConstPtr &msg);
     void FT_Callback(const std_msgs::Float64MultiArrayConstPtr &msg);
     void HandCameraCallback(const sensor_msgs::ImageConstPtr &msg);
     void FullCameraCallback(const sensor_msgs::ImageConstPtr &msg);
 
-    void PublishSyncData();
-
 private:
     ros::NodeHandle nh;
 
-    ros::Subscriber sync_EEpose_sub;
-    ros::Subscriber sync_gripper_sub;
+    ros::Subscriber sync_EEpose_obs_sub;
+    ros::Subscriber sync_EEpose_action_sub;
+    ros::Subscriber sync_gripper_obs_sub;
+    ros::Subscriber sync_gripper_action_sub;
     ros::Subscriber sync_FT_sub;
     ros::Subscriber sync_hand_cam_sub;
     ros::Subscriber sync_full_cam_sub;
@@ -28,28 +30,40 @@ private:
     sensor_msgs::Image full_cam_img_msg;
     std_msgs::Float64MultiArray FT_msg;
     geometry_msgs::PoseStamped EE_pose_msg;
+    geometry_msgs::PoseStamped EE_pose_d_msg;
     control_msgs::GripperCommand width_msg;
+    control_msgs::GripperCommand width_d_msg;
 };
 
 RecorderSubNode::RecorderSubNode()
 {
-    sync_EEpose_sub = nh.subscribe("/ee_pose_sync", 4, &RecorderSubNode::EEposeCallback, this);
-    sync_gripper_sub = nh.subscribe("/gripper_sync", 4, &RecorderSubNode::GripperCallback, this);
+    sync_EEpose_obs_sub = nh.subscribe("/ee_pose_sync", 4, &RecorderSubNode::EEposeCurrentCallback, this);
+    sync_EEpose_action_sub = nh.subscribe("/ee_pose_d_sync", 4, &RecorderSubNode::EEposeDesiredCallback, this);
+    sync_gripper_obs_sub = nh.subscribe("/gripper_sync", 4, &RecorderSubNode::GripperCurrentCallback, this);
+    sync_gripper_action_sub = nh.subscribe("/gripper_d_sync", 4, &RecorderSubNode::GripperDesiredCallback, this);
     sync_FT_sub = nh.subscribe("/FT_sync", 4, &RecorderSubNode::FT_Callback, this);
     sync_hand_cam_sub = nh.subscribe("/camera_hand_sync", 1, &RecorderSubNode::HandCameraCallback, this);
     sync_full_cam_sub = nh.subscribe("/camera_full_sync", 1, &RecorderSubNode::FullCameraCallback, this);
-
-    ROS_INFO("Sync_data_node");
 }
 
-void RecorderSubNode::EEposeCallback(const geometry_msgs::PoseStampedConstPtr &msg){
+void RecorderSubNode::EEposeCurrentCallback(const geometry_msgs::PoseStampedConstPtr &msg){
     EE_pose_msg.pose = msg->pose;
     ROS_INFO("ee_subed");
 }
 
-void RecorderSubNode::GripperCallback(const control_msgs::GripperCommandConstPtr &msg){
+void RecorderSubNode::EEposeDesiredCallback(const geometry_msgs::PoseStampedConstPtr &msg){
+    EE_pose_d_msg.pose = msg->pose;
+    ROS_INFO("ee_d_subed");
+}
+
+void RecorderSubNode::GripperCurrentCallback(const control_msgs::GripperCommandConstPtr &msg){
     width_msg.position = msg->position;
     ROS_INFO("width_subed");
+}
+
+void RecorderSubNode::GripperDesiredCallback(const control_msgs::GripperCommandConstPtr &msg){
+    width_d_msg.position = msg->position;
+    ROS_INFO("width_d_subed");
 }
 
 void RecorderSubNode::FT_Callback(const std_msgs::Float64MultiArrayConstPtr &msg){
@@ -77,6 +91,7 @@ int main(int argc, char **argv)
     while(ros::ok()){
 
         ros::spinOnce();
+        printf("\n");
         loop_rate.sleep();
     }
     return 0;

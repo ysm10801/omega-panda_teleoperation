@@ -69,7 +69,8 @@
         "unordered_set": "cpp",
         "hash_set": "cpp",
         "shared_mutex": "cpp",
-        "*.ipp": "cpp"
+        "*.ipp": "cpp",
+        "core": "cpp"
     },
     "python.autoComplete.extraPaths": [
         "/opt/ros/noetic/lib/python3/dist-packages",

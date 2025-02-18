@@ -87,6 +87,14 @@ Transform DesiredPose;
 Transform pandaUpdate;
 
 Eigen::Vector3d pose_diff;
+Eigen::Vector3d rot_diff;
+
+Eigen::AngleAxisd previousRotationDiff(Eigen::Matrix3d::Identity());
+
+Eigen::Matrix3d R_diff;
+Eigen::Vector3d rotationAxis;
+double rotationAngle;
+
 double gripper_diff;
 
 double grasp_force = 0.0;
@@ -96,9 +104,10 @@ double gripperCurrent = 0.0;
 
 double gripperForceTorque[12] = {0};
 
-double panda_feedback_gain = 70.0;
+double panda_feedback_gain_pos = 100.0;
+double panda_feedback_gain_orn = 15.0;
 double gripper_feedback_gain = 200.0;
-double FT_feedback_gain = 0.05;
+// double FT_feedback_gain = 0.05;
 
 
 class PandaPoseSubscriber {
@@ -277,7 +286,7 @@ void teleoperationControlLoop(int a_deviceId)
     /// Scaling factor between master translation and slave translation.
     /// A value greater than 1.0 means that the slave's movement will be
     /// larger than the master's.
-    constexpr double LinearScaling = 1.3; // 7.0 for simulation, 1.3 for real robot
+    constexpr double LinearScaling = 10.0; // 7.0 for simulation, 1.3 for real robot
 
     /// Scaling factor between master rotation and slave rotation.
     /// A value greater than 1.0 means that the slave's movement will be
@@ -461,21 +470,38 @@ void teleoperationControlLoop(int a_deviceId)
             // Compute damping torque.
             Eigen::Vector3d dampingTorque = -1.0 * AngularDamping * masterAngularVelocity;
 
+            R_diff = DesiredPose.rotation() * pandaUpdate.rotation().transpose();
+
+            Eigen::AngleAxisd currentRotationDiff(R_diff);
+
+            if (previousRotationDiff.axis().dot(currentRotationDiff.axis()) < 0) {
+                // Flip the axis and angle if directions are inconsistent
+                currentRotationDiff.axis() = -currentRotationDiff.axis();
+                currentRotationDiff.angle() = -currentRotationDiff.angle();
+            }
+            previousRotationDiff = currentRotationDiff;
+
+            rotationAxis = currentRotationDiff.axis();
+            rotationAngle = currentRotationDiff.angle();
+
+            rot_diff = rotationAngle * rotationAxis;
+
             pose_diff = DesiredPose.position() - pandaUpdate.position();
             gripper_diff = gripperCurrent - slaveGripperWidth;
 
             // Combine all force and torque contributions.
-            force = linearSpringForce + dampingForce - panda_feedback_gain * pose_diff;
+            force = linearSpringForce + dampingForce - panda_feedback_gain_pos * pose_diff;
             // force = linearSpringForce + dampingForce; // sim
             torque = angularSpringTorque + masterSpringTorque + dampingTorque;
+            // torque = angularSpringTorque + masterSpringTorque + dampingTorque - panda_feedback_gain_orn * rot_diff;
 
             grasp_force = gripper_diff * gripper_feedback_gain;
             // grasp_force = gripper_diff * gripper_feedback_gain -(gripperForceTorque[2] + gripperForceTorque[8])*FT_feedback_gain;
             // printf("Feedback from position %.4f\n", gripper_diff * gripper_feedback_gain);
             // printf("Feedback from sensor %.4f\n", -(gripperForceTorque[2] + gripperForceTorque[8])*FT_feedback_gain);
             
-            // printf("Computed force:  %.4f, %.4f, %.4f \n", force(0), force(1), force(2));
-            // printf("Pose difference: %.4f, %.4f, %.4f \n", pose_diff(0), pose_diff(1), pose_diff(2));
+            // printf("Computed torque:  %.4f, %.4f, %.4f \n", torque(0), torque(1), torque(2));
+            // printf("Rotation difference: %.4f, %.4f, %.4f \n", rot_diff(0), rot_diff(1), rot_diff(2));
             slaveGripperWidth = masterGripperWidth;
         }
 
@@ -793,7 +819,7 @@ int main(int argc, char **argv)
     std::cout << std::endl;
 
     double omega_freq = dhdGetComFreq();
-    printf("Omega 7 Communication Frequency: %.4f", omega_freq);
+    printf("Omega 7 Communication Frequency: %.4f\n", omega_freq);
 
     // Align the master haptic device with the slave robot initial position.
     // In this example, the slave robot initial position is located at the center of the workspace.
